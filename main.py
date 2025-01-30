@@ -15,7 +15,7 @@ RPC_USER = 'tigrinho'
 RPC_PASSWORD = 'cefetfriburgo'
 RPC_URL = 'http://testchain.chon.group:48332/'
 DATABASE_FILE = 'bitcoin_balances.db'
-MAX_WORKERS = 20
+MAX_WORKERS = 1
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,7 +33,22 @@ class BitcoinScanner:
         self.session = requests.Session()
         self.session.auth = HTTPBasicAuth(RPC_USER, RPC_PASSWORD)
         self.headers = {'content-type': 'application/json'}
+    def get_last_processed_block(self) -> int:
+        """Retorna a altura do último bloco processado"""
+        conn = self._get_conn()
+        cursor = conn.execute("SELECT value FROM metadata WHERE key = 'last_block'")
+        row = cursor.fetchone()
+        return int(row[0]) if row else -1
 
+    def update_last_block(self, height: int):
+        """Atualiza o último bloco processado"""
+        conn = self._get_conn()
+        with conn:
+            conn.execute('''
+                UPDATE metadata 
+                SET value = ?
+                WHERE key = 'last_block'
+            ''', (str(height),))
     def _get_conn(self) -> sqlite3.Connection:
         """Obtém conexão SQLite específica da thread"""
         if not hasattr(self.local, 'conn'):
@@ -45,6 +60,7 @@ class BitcoinScanner:
         """Inicializa o banco de dados"""
         conn = conn or self._get_conn()
         with conn:
+            # Tabelas existentes
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS balances (
                     address TEXT PRIMARY KEY,
@@ -58,6 +74,19 @@ class BitcoinScanner:
                     value INTEGER,
                     PRIMARY KEY (txid, vout)
                 )''')
+            
+            # Nova tabela de metadados
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )''')
+            
+            # Inicializa o último bloco se não existir
+            conn.execute('''
+                INSERT OR IGNORE INTO metadata (key, value)
+                VALUES ('last_block', '-1')
+            ''')
 
     def rpc_call(self, method: str, params: list = None, retries: int = 3) -> Optional[dict]:
         """Chamada RPC com tratamento de erros"""
@@ -173,6 +202,11 @@ class BitcoinScanner:
     def process_block(self, block_height: int):
         """Processa um bloco de forma isolada por thread"""
         try:
+            # Verifica se já foi processado
+            if block_height <= self.get_last_processed_block():
+                logging.debug(f"Bloco {block_height} já processado. Pulando.")
+                return True
+                
             block_hash = self.rpc_call('getblockhash', [block_height])
             if not block_hash:
                 return False
@@ -186,14 +220,24 @@ class BitcoinScanner:
             for tx in block['tx']:
                 self.process_transaction(tx)
             
+            # Atualiza apenas se processado com sucesso
+            self.update_last_block(block_height)
             return True
-        
+    
         except Exception as e:
             logging.error(f"Erro no bloco {block_height}: {e}")
             return False
 
-    def scan_blockchain(self, start_height: int, end_height: int):
-        """Varredura paralela com segurança em threads"""
+    def scan_blockchain(self, end_height: int):
+        """Varre desde o último bloco processado até a altura especificada"""
+        start_height = self.get_last_processed_block() + 1
+        
+        if start_height > end_height:
+            logging.info("Nenhum bloco novo para processar")
+            return
+        
+        logging.info(f"Iniciando varredura dos blocos {start_height}-{end_height}")
+        
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = {
                 executor.submit(self.process_block, height): height
@@ -221,17 +265,25 @@ class BitcoinScanner:
             for row in cursor.fetchall()
         }
 
+
 if __name__ == '__main__':
     scanner = BitcoinScanner()
     
-    current_height = 1 #scanner.rpc_call('getblockcount')
+    # Obtém altura atual da blockchain
+    current_height = scanner.rpc_call('getblockcount')
     if current_height is None:
         logging.error("Falha ao obter altura da blockchain")
         exit(1)
     
-    start_height = 0 #//max(0, current_height - 100)
-    scanner.scan_blockchain(start_height, current_height)
+    # Varre apenas os novos blocos
+    scanner.scan_blockchain(current_height)
     
+    # Exibir status
+    last_processed = scanner.get_last_processed_block()
+    logging.info(f"Último bloco processado: {last_processed}/{current_height}")
+    
+    # Exibir saldos
     print("\nTop Carteiras:")
-    for address, balance in scanner.get_balances(min_balance=0.01).items():
+    balances = scanner.get_balances(min_balance=0.00000001)  # Mostra todos os saldos
+    for address, balance in balances.items():
         print(f"{address}: {balance:.8f} BTC")
