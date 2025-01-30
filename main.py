@@ -1,6 +1,7 @@
 import requests
 from requests.auth import HTTPBasicAuth
 import hashlib
+import argparse
 import base58
 import bech32
 import sqlite3
@@ -9,13 +10,15 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Tuple, Optional
+URL = 'http://testchain.chon.group:'
+# Configurações padrão
+DEFAULT_RPC_URLS = {
+    'mainnet': f'{URL}8332/',
+    'testnet4': f'{URL}48332/'  
+}
 
-# Configurações
-RPC_USER = 'tigrinho'
-RPC_PASSWORD = 'cefetfriburgo'
-RPC_URL = 'http://testchain.chon.group:48332/'
 DATABASE_FILE = 'bitcoin_balances.db'
-MAX_WORKERS = 1
+MAX_WORKERS = 20
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,12 +30,31 @@ logging.basicConfig(
 )
 
 class BitcoinScanner:
-    def __init__(self):
-        self.local = threading.local()  # Armazenamento por thread
+    def __init__(self, network: str = 'mainnet', rpc_user: str = 'tigrinho', 
+                 rpc_password: str = 'cefetfriburgo', rpc_url: Optional[str] = None,
+                 db_file: Optional[str] = None):
+        self.network = network
+        self.rpc_user = rpc_user
+        self.rpc_password = rpc_password
+        self.rpc_url = rpc_url or DEFAULT_RPC_URLS.get(network)
+        self.db_file = db_file or f'bitcoin_balances_{network}.db'
+
+        # Configurações de endereços por rede
+        if self.network == 'testnet4':
+            self.bech32_hrp = 'tb'
+            self.p2pkh_prefix = b'\x6f'  # Prefixo P2PKH testnet (endereços começando com m/n)
+            self.p2sh_prefix = b'\xc4'   # Prefixo P2SH testnet (endereços começando com 2)
+        else:  # mainnet
+            self.bech32_hrp = 'bc'
+            self.p2pkh_prefix = b'\x00'  # Prefixo P2PKH mainnet (endereços começando com 1)
+            self.p2sh_prefix = b'\x05'   # Prefixo P2SH mainnet (endereços começando com 3)
+
+        self.local = threading.local()
         self._init_db()
         self.session = requests.Session()
-        self.session.auth = HTTPBasicAuth(RPC_USER, RPC_PASSWORD)
+        self.session.auth = HTTPBasicAuth(self.rpc_user, self.rpc_password)
         self.headers = {'content-type': 'application/json'}
+
     def get_last_processed_block(self) -> int:
         """Retorna a altura do último bloco processado"""
         conn = self._get_conn()
@@ -49,13 +71,14 @@ class BitcoinScanner:
                 SET value = ?
                 WHERE key = 'last_block'
             ''', (str(height),))
+
     def _get_conn(self) -> sqlite3.Connection:
         """Obtém conexão SQLite específica da thread"""
         if not hasattr(self.local, 'conn'):
-            self.local.conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
+            self.local.conn = sqlite3.connect(self.db_file, check_same_thread=False)
             self._init_db(self.local.conn)
         return self.local.conn
-
+    
     def _init_db(self, conn: sqlite3.Connection = None):
         """Inicializa o banco de dados"""
         conn = conn or self._get_conn()
@@ -99,7 +122,7 @@ class BitcoinScanner:
 
         for attempt in range(retries):
             try:
-                response = self.session.post(RPC_URL, json=payload, headers=self.headers, timeout=30)
+                response = self.session.post(self.rpc_url, json=payload, headers=self.headers, timeout=30)
                 response.raise_for_status()
                 data = response.json()
                 
@@ -116,29 +139,29 @@ class BitcoinScanner:
         logging.error(f"Falha após {retries} tentativas: {method}")
         return None
 
-    @staticmethod
-    def derive_address(script_hex: str) -> Optional[str]:
-        """Deriva endereços de scripts Bitcoin"""
+  
+    def derive_address(self, script_hex: str) -> Optional[str]:
+        """Deriva endereços de scripts Bitcoin com suporte a múltiplas redes"""
         try:
-            if script_hex.startswith('76a914'):
+            if script_hex.startswith('76a914'):  # P2PKH
                 pubkey_hash = bytes.fromhex(script_hex[6:-4])
-                return base58.b58encode_check(b'\x00' + pubkey_hash).decode()
+                return base58.b58encode_check(self.p2pkh_prefix + pubkey_hash).decode()
             
-            elif script_hex.startswith('a914'):
+            elif script_hex.startswith('a914'):  # P2SH
                 script_hash = bytes.fromhex(script_hex[4:-2])
-                return base58.b58encode_check(b'\x05' + script_hash).decode()
+                return base58.b58encode_check(self.p2sh_prefix + script_hash).decode()
             
-            elif script_hex.startswith('0014'):
+            elif script_hex.startswith('0014'):  # P2WPKH
                 witness_program = bytes.fromhex(script_hex[4:])
-                return bech32.encode('bc', 0, witness_program)
+                return bech32.encode(self.bech32_hrp, 0, witness_program)
             
-            elif script_hex.startswith('0020'):
+            elif script_hex.startswith('0020'):  # P2WSH
                 witness_program = bytes.fromhex(script_hex[4:])
-                return bech32.encode('bc', 0, witness_program)
+                return bech32.encode(self.bech32_hrp, 0, witness_program)
             
-            elif script_hex.startswith('5120'):
+            elif script_hex.startswith('5120'):  # P2TR
                 witness_program = bytes.fromhex(script_hex[2:])
-                return bech32.encode('bc', 1, witness_program)
+                return bech32.encode(self.bech32_hrp, 1, witness_program)
             
             return None
         
@@ -267,23 +290,35 @@ class BitcoinScanner:
 
 
 if __name__ == '__main__':
-    scanner = BitcoinScanner()
+    parser = argparse.ArgumentParser(description='Bitcoin Blockchain Scanner')
+    parser.add_argument('--network', choices=['mainnet', 'testnet4'], default='mainnet',
+                        help='Rede Bitcoin a ser escaneada')
+    parser.add_argument('--rpc-user', default='tigrinho', help='Usuário RPC')
+    parser.add_argument('--rpc-password', default='cefetfriburgo', help='Senha RPC')
+    parser.add_argument('--rpc-url',default=None, help='URL personalizada para RPC')
+    parser.add_argument('--db-file', help='Arquivo de banco de dados personalizado')
     
-    # Obtém altura atual da blockchain
+    args = parser.parse_args()
+
+    scanner = BitcoinScanner(
+        network=args.network,
+        rpc_user=args.rpc_user,
+        rpc_password=args.rpc_password,
+        rpc_url=args.rpc_url,
+        db_file=args.db_file
+    )
+
     current_height = scanner.rpc_call('getblockcount')
     if current_height is None:
         logging.error("Falha ao obter altura da blockchain")
         exit(1)
     
-    # Varre apenas os novos blocos
     scanner.scan_blockchain(current_height)
     
-    # Exibir status
     last_processed = scanner.get_last_processed_block()
     logging.info(f"Último bloco processado: {last_processed}/{current_height}")
     
-    # Exibir saldos
     print("\nTop Carteiras:")
-    balances = scanner.get_balances(min_balance=0.00000001)  # Mostra todos os saldos
+    balances = scanner.get_balances(min_balance=0.00000001)
     for address, balance in balances.items():
         print(f"{address}: {balance:.8f} BTC")
