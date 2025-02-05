@@ -105,7 +105,7 @@ venv.bak/
 
 # mkdocs documentation
 /site
-
+/bpk_db/
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -122,3 +122,7 @@ cython_debug/
 
 # VS Code
 .vscode/
+
+#pasta bkp
+bkp*/
+bitcoin*
