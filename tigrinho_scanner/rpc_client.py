@@ -3,6 +3,8 @@ from requests.auth import HTTPBasicAuth
 import logging
 import time
 from typing import Optional, Dict
+from config import MAINNET_RPC_PORT, TESTNET4_RPC_PORT
+
 
 class RPCClient:
     def __init__(self, network: str, rpc_user: str, rpc_password: str, rpc_url: str = None):
@@ -14,8 +16,8 @@ class RPCClient:
     def _get_default_url(self, network: str) -> str:
         base_url = 'http://testchain.chon.group:'# http://testchain.chon.group:48332/
         return {
-            'mainnet': f'{base_url}8332/',
-            'testnet4': f'{base_url}48332/'
+            'mainnet': f'{base_url}{MAINNET_RPC_PORT}/',
+            'testnet4': f'{base_url}{TESTNET4_RPC_PORT}/'
         }[network]
 
     def call(self, method: str, params: list = None, retries: int = 3) -> Optional[Dict]:

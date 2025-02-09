@@ -3,17 +3,17 @@ from psycopg2 import pool, sql
 from psycopg2.extensions import connection
 from typing import Optional, Any, List, Dict
 import logging
-
+from config import POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB
 class DatabaseManager:
     def __init__(self):
         self.connection_pool = psycopg2.pool.ThreadedConnectionPool(
             minconn=5,
             maxconn=20,
-            user="scanner",
-            password="cefetfriburgo",
-            host="localhost",
-            port="5432",
-            database="bitcoin",
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD,
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            database=POSTGRES_DB,
             options='-c client_encoding=UTF8'
         )
         
