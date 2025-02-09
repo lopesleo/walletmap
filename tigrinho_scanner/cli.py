@@ -1,8 +1,8 @@
 import argparse
 import logging
-from bitcoin_scanner.scanner import BitcoinScanner
-from bitcoin_scanner.rpc_client import RPCClient
-from bitcoin_scanner.database import DatabaseManager
+from tigrinho_scanner.scanner import BitcoinScanner
+from tigrinho_scanner.rpc_client import RPCClient
+from tigrinho_scanner.database import DatabaseManager
 
 def configure_logging():
     logging.basicConfig(
@@ -32,8 +32,7 @@ def main():
         rpc_url=args.rpc_url
     )
     
-    db_file = args.db_file or f'bitcoin_balances_{args.network}.db'
-    db_manager = DatabaseManager(db_file)
+    db_manager = DatabaseManager()
     
     scanner = BitcoinScanner(
         network=args.network,
