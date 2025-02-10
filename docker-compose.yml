@@ -1,0 +1,29 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:15
+    container_name: pg-littletiger
+    environment:
+      POSTGRES_USER: scanner
+      POSTGRES_PASSWORD: cefetfriburgo
+      POSTGRES_DB: bitcoin
+    ports:
+      - "5432:5432"
+    command: ["-c", "max_connections=100", "-c", "shared_buffers=1GB"]
+    networks:
+      - tiger
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: my-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: leo@gmail.com
+      PGADMIN_DEFAULT_PASSWORD: postgres
+    ports:
+      - "15432:80"
+    networks:
+      - tiger
+
+networks:
+  tiger:
+    driver: bridge

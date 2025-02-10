@@ -1,134 +1,161 @@
 import psycopg2
-from psycopg2 import pool, sql
+from psycopg2 import pool
 from psycopg2.extensions import connection
-from typing import Optional, Any, List, Dict
+from typing import Optional, List, Dict
 import logging
-from config import POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB
+from config import (
+    POSTGRES_USER,
+    POSTGRES_PASSWORD,
+    POSTGRES_HOST,
+    POSTGRES_PORT,
+    POSTGRES_DB
+)
+
 class DatabaseManager:
     def __init__(self):
-        self.connection_pool = psycopg2.pool.ThreadedConnectionPool(
-            minconn=5,
-            maxconn=20,
-            user=POSTGRES_USER,
-            password=POSTGRES_PASSWORD,
-            host=POSTGRES_HOST,
-            port=POSTGRES_PORT,
-            database=POSTGRES_DB,
-            options='-c client_encoding=UTF8'
-        )
+        self.connection_params = {
+            'dbname': POSTGRES_DB,
+            'user': POSTGRES_USER,
+            'password': POSTGRES_PASSWORD,
+            'host': POSTGRES_HOST,
+            'port': POSTGRES_PORT
+        }
         
+        self.connection_pool = self._create_connection_pool()
         self._initialize_database()
 
+    def _create_connection_pool(self) -> psycopg2.pool.ThreadedConnectionPool:
+        """Cria e retorna o pool de conexões"""
+        return psycopg2.pool.ThreadedConnectionPool(
+            minconn=5,
+            maxconn=20,
+            **self.connection_params,
+            options='-c statement_timeout=30000'  # 30 segundos
+        )
+
     def _initialize_database(self):
+        """Inicializa a estrutura do banco de dados"""
         with self.get_connection() as conn:
             with conn.cursor() as cur:
                 # Criação das tabelas
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS balances (
                         address VARCHAR(128) PRIMARY KEY,
-                        balance BIGINT NOT NULL DEFAULT 0
+                        balance BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0)
                     )
                 """)
                 
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS utxos (
-                        txid VARCHAR(64),
-                        vout INTEGER,
-                        address VARCHAR(128),
-                        value BIGINT,
-                        PRIMARY KEY (txid, vout)
+                        txid VARCHAR(64) NOT NULL,
+                        vout INTEGER NOT NULL CHECK (vout >= 0),
+                        address VARCHAR(128) NOT NULL,
+                        value BIGINT NOT NULL CHECK (value >= 0),
+                        PRIMARY KEY (txid, vout),
+                        FOREIGN KEY (address) REFERENCES balances(address) ON DELETE CASCADE
                     )
                 """)
                 
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS metadata (
-                        key VARCHAR(128) PRIMARY KEY,
-                        value TEXT
-                    )
-                """)
+                # cur.execute("""
+                #     CREATE TABLE IF NOT EXISTS metadata (
+                #         key VARCHAR(128) PRIMARY KEY,
+                #         value TEXT NOT NULL
+                #     )
+                # """)
                 
-                # Inserção inicial com tratamento de conflito
-                cur.execute("""
-                    INSERT INTO metadata (key, value)
-                    VALUES ('last_block', '0')
-                    ON CONFLICT (key) DO NOTHING
-                """)
+                # cur.execute("""
+                #     INSERT INTO metadata (key, value)
+                #     VALUES ('last_block', '0')
+                #     ON CONFLICT (key) DO NOTHING
+                # """)
                 
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS processed_blocks (
-                        height INTEGER PRIMARY KEY,
-                        status VARCHAR(20) CHECK(status IN ('pending', 'processed', 'failed')),
-                        retries INTEGER DEFAULT 0,
+                        height INTEGER PRIMARY KEY CHECK (height >= 0),
+                        status VARCHAR(20) NOT NULL DEFAULT 'pending' 
+                            CHECK(status IN ('pending', 'processed', 'failed')),
+                        retries INTEGER NOT NULL DEFAULT 0 CHECK (retries >= 0),
                         last_attempt TIMESTAMP
                     )
                 """)
+                
+                # Índices
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS utxos_address_idx 
+                    ON utxos (address)
+                """)
+                
                 conn.commit()
 
     def get_connection(self) -> connection:
         """Obtém uma conexão do pool"""
-        conn = self.connection_pool.getconn()
-        conn.autocommit = False
-        conn.set_client_encoding('UTF8')
-
-        return conn
+        try:
+            conn = self.connection_pool.getconn()
+            conn.autocommit = False
+            return conn
+        except psycopg2.Error as e:
+            logging.error(f"Erro ao obter conexão: {e}")
+            raise
 
     def return_connection(self, conn: connection):
         """Devolve uma conexão ao pool"""
-        self.connection_pool.putconn(conn)
+        if not conn.closed:
+            self.connection_pool.putconn(conn)
 
-    def execute(self, query: str, params: Optional[tuple] = None) -> None:
-        """Executa uma query sem retorno de resultados"""
-        conn = self.get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(query, params)
-                conn.commit()
-        except Exception as e:
-            conn.rollback()
-            logging.error(f"Erro na execução da query: {e}")
-            raise
-        finally:
-            self.return_connection(conn)
-
-    def fetch_one(self, query: str, params: Optional[tuple] = None) -> Optional[Dict]:
+    def fetch_one(self, query: str, params: tuple = None) -> Optional[Dict]:
         """Executa uma query e retorna um único resultado"""
         conn = self.get_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute(query, params)
+                cur.execute(query, params or ())
                 result = cur.fetchone()
                 if result:
                     return {desc[0]: value for desc, value in zip(cur.description, result)}
                 return None
-        except Exception as e:
-            logging.error(f"Erro na consulta: {e}")
+        except psycopg2.Error as e:
+            logging.error(f"Erro no fetch_one: {e}")
             return None
         finally:
             self.return_connection(conn)
 
-    def fetch_all(self, query: str, params: Optional[tuple] = None) -> List[Dict]:
+    def fetch_all(self, query: str, params: tuple = None) -> List[Dict]:
         """Executa uma query e retorna todos os resultados"""
         conn = self.get_connection()
         try:
             with conn.cursor() as cur:
-                cur.execute(query, params)
+                cur.execute(query, params or ())
                 results = cur.fetchall()
                 return [
                     {desc[0]: value for desc, value in zip(cur.description, row)}
                     for row in results
                 ]
-        except Exception as e:
-            logging.error(f"Erro na consulta: {e}")
+        except psycopg2.Error as e:
+            logging.error(f"Erro no fetch_all: {e}")
             return []
         finally:
             self.return_connection(conn)
 
-    def get_last_processed_block(self) -> int:
-        """Retorna o último bloco processado"""
-        result = self.fetch_one("SELECT value FROM metadata WHERE key = 'last_block'")
-        return int(result['value']) if result else -1
+    def execute(self, query: str, params: tuple = None):
+        """Executa uma query sem retorno"""
+        conn = self.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(query, params or ())
+                conn.commit()
+        except psycopg2.Error as e:
+            conn.rollback()
+            logging.error(f"Erro na execução: {e}")
+            raise
+        finally:
+            self.return_connection(conn)
 
+    def get_last_processed_block(self) -> int:
+            """Obtém a altura do último bloco processado"""
+            result = self.fetch_one(
+                "SELECT MAX(height) as last_block FROM processed_blocks WHERE status = 'processed'"
+            )
+            return result['last_block'] if result and result['last_block'] is not None else -1
+        
     def close_pool(self):
         """Fecha todas as conexões do pool"""
         self.connection_pool.closeall()
-

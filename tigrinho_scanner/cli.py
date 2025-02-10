@@ -47,7 +47,7 @@ def main():
         scanner.scan_blockchain(current_height)
         
     except KeyboardInterrupt:
-        logging.warning("\nVarredura interrompida pelo usuário")
+            logging.warning("\nVarredura interrompida pelo usuário")
     finally:
         # Exibir resumo final
         last_block = db_manager.get_last_processed_block()
