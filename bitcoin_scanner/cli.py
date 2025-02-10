@@ -1,8 +1,8 @@
 import argparse
 import logging
-from tigrinho_scanner.scanner import BitcoinScanner
-from tigrinho_scanner.rpc_client import RPCClient
-from tigrinho_scanner.database import DatabaseManager
+from bitcoin_scanner.scanner import BitcoinScanner
+from bitcoin_scanner.rpc_client import RPCClient
+from bitcoin_scanner.database import DatabaseManager
 
 def configure_logging():
     logging.basicConfig(
@@ -21,7 +21,6 @@ def main():
     parser.add_argument('--rpc-user', default='tigrinho')
     parser.add_argument('--rpc-password', default='cefetfriburgo')
     parser.add_argument('--rpc-url')
-    parser.add_argument('--db-file')
     args = parser.parse_args()
 
     # Inicializar componentes

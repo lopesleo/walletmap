@@ -27,7 +27,6 @@ Projeto para escanear a blockchain do Bitcoin e consolidar saldos de endereços.
   - base58
   - bech32
   - psycopg2 (para suporte PostgreSQL)
-  - (outros dependentes conforme necessário)
 
 ## Configuração
 
@@ -36,7 +35,6 @@ Projeto para escanear a blockchain do Bitcoin e consolidar saldos de endereços.
    - `--network` (ex.: mainnet ou testnet4)
    - `--rpc-user` e `--rpc-password`
    - `--rpc-url` (opcional)
-   - `--db-file` (se utilizar SQLite)
 
 2. Para PostgreSQL, verifique a configuração em [bitcoin_scanner/database.py](bitcoin_scanner/database.py).
 
