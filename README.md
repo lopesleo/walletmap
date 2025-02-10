@@ -5,19 +5,19 @@ Projeto para escanear a blockchain do Bitcoin e consolidar saldos de endereços.
 ## Componentes Principais
 
 - **Blockchain Scanner**  
-  Implementado como [`BitcoinScanner`](tigrinho_scanner/scanner.py) em [tigrinho_scanner/scanner.py](tigrinho_scanner/scanner.py), este módulo processa blocos, gerencia transações e atualiza o status dos blocos processados.
+  Implementado como [`BitcoinScanner`](bitcoin_scanner/scanner.py) em [bitcoin_scanner/scanner.py](bitcoin_scanner/scanner.py), este módulo processa blocos, gerencia transações e atualiza o status dos blocos processados.
 
 - **Cliente RPC**  
-  A comunicação com o nó Bitcoin é feita por meio do [`RPCClient`](tigrinho_scanner/rpc_client.py) em [tigrinho_scanner/rpc_client.py](tigrinho_scanner/rpc_client.py), que gerencia as chamadas JSON-RPC com tratamento de erros e retentativas.
+  A comunicação com o nó Bitcoin é feita por meio do [`RPCClient`](bitcoin_scanner/rpc_client.py) em [bitcoin_scanner/rpc_client.py](bitcoin_scanner/rpc_client.py), que gerencia as chamadas JSON-RPC com tratamento de erros e retentativas.
 
 - **Gerenciamento de Banco de Dados**  
-  O [`DatabaseManager`](tigrinho_scanner/database.py) em [tigrinho_scanner/database.py](tigrinho_scanner/database.py) é responsável por conexões e operações CRUD no banco de dados, incluindo tabelas para saldos, utxos, metadados e blocos processados.
+  O [`DatabaseManager`](bitcoin_scanner/database.py) em [bitcoin_scanner/database.py](bitcoin_scanner/database.py) é responsável por conexões e operações CRUD no banco de dados, incluindo tabelas para saldos, utxos, metadados e blocos processados.
 
 - **Derivação de Endereços**  
-  A função [`derive_address`](tigrinho_scanner/address.py) em [tigrinho_scanner/address.py](tigrinho_scanner/address.py) realiza a derivação dos endereços Bitcoin a partir de scripts, suportando diversos formatos (P2PKH, P2SH, P2WPKH, P2WSH e P2TR).
+  A função [`derive_address`](bitcoin_scanner/address.py) em [bitcoin_scanner/address.py](bitcoin_scanner/address.py) realiza a derivação dos endereços Bitcoin a partir de scripts, suportando diversos formatos (P2PKH, P2SH, P2WPKH, P2WSH e P2TR).
 
 - **Interface de Linha de Comando (CLI)**  
-  O módulo [`cli.py`](tigrinho_scanner/cli.py) em [tigrinho_scanner/cli.py](tigrinho_scanner/cli.py) configura a execução e registra logs, iniciando a varredura dos blocos.
+  O módulo [`cli.py`](bitcoin_scanner/cli.py) em [bitcoin_scanner/cli.py](bitcoin_scanner/cli.py) configura a execução e registra logs, iniciando a varredura dos blocos.
 
 ## Requisitos
 
@@ -38,7 +38,7 @@ Projeto para escanear a blockchain do Bitcoin e consolidar saldos de endereços.
    - `--rpc-url` (opcional)
    - `--db-file` (se utilizar SQLite)
 
-2. Para PostgreSQL, verifique a configuração em [tigrinho_scanner/database.py](tigrinho_scanner/database.py).
+2. Para PostgreSQL, verifique a configuração em [bitcoin_scanner/database.py](bitcoin_scanner/database.py).
 
 ## Uso
 
@@ -54,7 +54,7 @@ Esta chamada utiliza o main.py, que importa e executa a função principal defin
 ## Estrutura do Projeto
 
 main\_\_.pyx / main.py – Pontos de entrada para diferentes implementações.
-tigrinho_scanner – Contém a lógica principal:
+bitcoin_scanner – Contém a lógica principal:
 scanner.py: Lógica da varredura e processamento de blocos.
 rpc_client.py: Comunicação RPC.
 database.py: Gerenciamento do banco de dados.

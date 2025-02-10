@@ -125,4 +125,5 @@ cython_debug/
 
 #pasta bkp
 bkp*/
-bitcoin*
+*.db
+*.log
