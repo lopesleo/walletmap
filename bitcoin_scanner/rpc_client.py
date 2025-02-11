@@ -3,7 +3,7 @@ from requests.auth import HTTPBasicAuth
 import logging
 import time
 from typing import Optional, Dict
-from config import MAINNET_RPC_PORT, TESTNET4_RPC_PORT
+from config import MAINNET_RPC_PORT, TESTNET4_RPC_PORT, RPC_BASE_URL
 
 
 class RPCClient:
@@ -14,7 +14,7 @@ class RPCClient:
         self.headers = {'content-type': 'application/json'}
 
     def _get_default_url(self, network: str) -> str:
-        base_url = 'http://testchain.chon.group:'# http://testchain.chon.group:48332/
+        base_url = RPC_BASE_URL if RPC_BASE_URL.endswith('/') else f"{RPC_BASE_URL}/"
         return {
             'mainnet': f'{base_url}{MAINNET_RPC_PORT}/',
             'testnet4': f'{base_url}{TESTNET4_RPC_PORT}/'
