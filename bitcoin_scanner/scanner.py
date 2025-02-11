@@ -4,8 +4,8 @@ from typing import Dict, List
 import psycopg2
 import psycopg2.extras
 from psycopg2.extensions import connection
-from tigrinho_scanner.database import DatabaseManager
-from tigrinho_scanner.address import derive_address
+from bitcoin_scanner.database import DatabaseManager
+from bitcoin_scanner.address import derive_address
 
 RETRY_LIMIT = 3
 BLOCK_BATCH_SIZE = 100
