@@ -16,8 +16,8 @@ class RPCClient:
     def _get_default_url(self, network: str) -> str:
         base_url = RPC_BASE_URL
         return {
-            'mainnet': f'{base_url}:{MAINNET_RPC_PORT}/',
-            'testnet4': f'{base_url}:{TESTNET4_RPC_PORT}/'
+            'mainnet': f'{base_url}:{MAINNET_RPC_PORT}',
+            'testnet4': f'{base_url}:{TESTNET4_RPC_PORT}'
         }[network]
 
     def call(self, method: str, params: list = None, retries: int = 3) -> Optional[Dict]:
